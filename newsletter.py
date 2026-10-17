@@ -378,6 +378,7 @@ def publish_issue(articles: list[dict], errors: list[str]) -> Path:
                   "<a href=\"https://www.gdeltproject.org/\">The GDELT Project</a>.</footer></main></body></html>")
     issue_path = PUBLIC_ISSUES / issue_name
     atomic_write(issue_path, issue_html)
+    os.chmod(issue_path, 0o644)
     try:
         existing = json.loads(PUBLIC_INDEX.read_text(encoding="utf-8"))
         if not isinstance(existing, list):
@@ -389,6 +390,7 @@ def publish_issue(articles: list[dict], errors: list[str]) -> Path:
              "url": f"/issues/{issue_name}"}
     index = [entry] + [row for row in existing if isinstance(row, dict) and row.get("url") != entry["url"]]
     atomic_write(PUBLIC_INDEX, json.dumps(index[:100], ensure_ascii=False, indent=2) + "\n")
+    os.chmod(PUBLIC_INDEX, 0o644)
     return issue_path
 
 

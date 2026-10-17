@@ -19,6 +19,17 @@ The current RSS source is Hacker News, a community feed focused on technology, a
 
 Public issues link to original reporting and show headlines, source names, and links. They do not republish full articles, RSS excerpts, or source images. Optional AI summaries require `OPENAI_API_KEY` and explicit `--ai` or `NEWSLETTER_AI_PUBLIC_SUMMARIES=true`; usage may incur API charges. AI remains off by default. Headlines and generated summaries are not independently fact-checked or reviewed by an editor. Check each publisher’s terms and obtain permission before adding feeds or reusing their material in a commercial product.
 
+## Free reading and advertising setup
+
+The homepage and issues are free to read. AdSense Auto ads support is installed but inactive until a real publisher ID is configured. To activate it:
+
+1. Apply for an AdSense account and add the live site URL in AdSense. Google reviews the whole site; ads cannot serve until its status is **Ready**.
+2. Configure Auto ads in AdSense. Put the `ca-pub-...` publisher ID into `site/adsense-config.js` in place of the empty value, then publish that change. The loader is included on the homepage and every generated issue.
+3. Add Google's account-provided seller line to `site/ads.txt` once the account supplies it, then deploy. Do not use a guessed publisher ID or ads.txt entry.
+4. Complete identity, tax, payment, and privacy/consent setup in AdSense. Revenue depends on eligible ad impressions, audience, advertiser demand, location, and policy compliance. Google does not guarantee payment for every page access. Never ask readers to click ads.
+
+AdSense approval is not guaranteed. The current issue format is mostly source-linked headlines, so Google may consider pages to have too little original publisher content. Publish useful original reporting or commentary and a privacy policy before applying. See Google's [site review instructions](https://support.google.com/adsense/answer/7584263?hl=en) and [publisher policies](https://support.google.com/adsense/answer/10502938?hl=en&topic=1271507), which disallow monetizing low-value or replicated pages.
+
 ## Operations
 
 The isolated Droplet runs Ubuntu and Nginx. The collector runs under restricted account `newsletterd`; published issues live in `/var/lib/newsletters/issues`. Check logs with `sudo tail -n 100 /var/log/newsletters-daily.log` and services with `sudo systemctl status nginx cron`. To run manually: `cd /opt/newsletters && sudo /usr/bin/python3 newsletter.py --draft --publish-public`.

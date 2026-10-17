@@ -63,6 +63,10 @@ class NewsletterTests(unittest.TestCase):
             self.assertNotIn("javascript:alert(1)", rendered)
             self.assertIn("does not prove a story has not appeared in U.S. media", rendered)
             self.assertIn("Source availability notes", rendered)
+            self.assertIn('href="/about.html"', rendered)
+            self.assertIn('href="/privacy.html"', rendered)
+            self.assertEqual(rendered.count('src="/adsense-config.js"'), 1)
+            self.assertEqual(rendered.count('src="/adsense.js"'), 1)
             self.assertEqual(len(entries), 1)
             self.assertEqual(entries[0]["url"], f"/issues/{issue_path.name}")
 

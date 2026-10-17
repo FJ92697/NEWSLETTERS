@@ -482,7 +482,9 @@ def publish_issue(articles: list[dict], errors: list[str], story_summaries: dict
                   f"<main>{''.join(notices)}{''.join(cards)}<footer>Free to read. Advertising may appear after an ad network approves this site. "
                   "Source links are provided for readers to review the original reporting. "
                   "Publication time and coverage metadata may be incomplete. GDELT data source: "
-                  "<a href=\"https://www.gdeltproject.org/\">The GDELT Project</a>.</footer></main></body></html>")
+                  "<a href=\"https://www.gdeltproject.org/\">The GDELT Project</a>. "
+                  "<nav aria-label=\"Publisher information\"><a href=\"/about.html\">About &amp; editorial approach</a> · "
+                  "<a href=\"/privacy.html\">Privacy</a></nav></footer></main></body></html>")
     issue_path = PUBLIC_ISSUES / issue_name
     atomic_write(issue_path, issue_html)
     os.chmod(issue_path, 0o644)

@@ -1,27 +1,24 @@
 # World Desk newsletter
 
-A source-linked global business and technology briefing site with automated daily collection. The public site serves static HTML through Nginx; a scheduled collector reads enabled RSS feeds and GDELT search results and publishes a headline-led issue at 06:00 America/New_York.
+A source-linked, general-interest daily briefing for readers of different ages. It collects enabled RSS sources and global GDELT results across world affairs, public safety, health, science, space, climate, technology, education, culture, sports, business, and human-interest topics.
 
 ## Live service
 
 - Site: https://161-35-103-204.sslip.io/
-- Server: isolated DigitalOcean Droplet, NYC1, 2 vCPU / 4 GB RAM / 80 GB disk. The selected plan is $24/month before tax and optional services.
-- Schedule: once per day, 06:00 America/New_York. The site is intended to run continuously; daily collection depends on the server, network, and upstream source availability.
+- Schedule: one automatic publication each day at 6:00 a.m. America/New_York on the dedicated DigitalOcean Droplet.
 
-## Automatic collection
+## Collection and ranking
 
-The collector fetches enabled RSS feeds and runs up to two bounded GDELT Doc API searches per cycle: one combined OR query across configured topics and one broad U.S. comparison query. A short 429 retry happens only when the API supplies a usable `Retry-After` of 30 seconds or less. If GDELT is unavailable, RSS results can still be published; failed/empty collections preserve the prior public index. At most 50 records per GDELT query and 30 combined issue cards are processed. Review `sources.json` to manage feeds and topics.
+Each daily run reads enabled RSS feeds and makes up to two bounded GDELT DOC API calls: one global search using the configured topic list, and one U.S. comparison search. GDELT is asked for up to 250 results per request, using its hybrid relevance ranking, which considers text relevance and outlet popularity. The publisher interleaves RSS and GDELT items, removes exact URL and normalized headline duplicates, and publishes up to 50 source-linked stories. These limits keep a daily issue readable while retrieving a larger candidate pool. A 429 is retried once only when the service supplies a short `Retry-After` value; if GDELT is unavailable, RSS collection can continue and the issue displays a source availability note.
 
-This is a bounded, configured sample, not every news item worldwide, and cannot prove an item has never appeared in U.S. media. Search results can be incomplete or rate limited. GDELT's documented search supports boolean operators and multilingual monitoring, but coverage is not exhaustive: [GDELT DOC API overview](https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/). Hosted API quotas can produce HTTP 429 responses, so this collector limits request volume: [GDELT API quota notes](https://blog.gdeltproject.org/behind-the-scenes-api-quotas-the-impact-of-a-fraction-of-a-qps/).
+GDELT says DOC searches support OR queries across monitored languages and its Article List can return up to 250 results. Its relevance ranking considers outlet popularity as one factor; this is not an editorial judgment or a guarantee that every important story will appear. Coverage is incomplete, and the system cannot prove that a story has not appeared in U.S. media. [GDELT DOC API documentation](https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/).
 
-## Publication and business features
+The current RSS source is Hacker News, a community feed focused on technology, and should be treated as only one input. GDELT provides the wider general-interest discovery. The configured topics are in `sources.json` and can be adjusted there.
 
-Public issues link to sources and do not reproduce full articles, RSS excerpts, or source images. Optional AI summaries paraphrase only collected headline/feed metadata. They require `OPENAI_API_KEY` and explicit `--ai` or `NEWSLETTER_AI_PUBLIC_SUMMARIES=true`; API use may incur charges. AI is disabled by default. Automated output is not independently fact-checked or reviewed by an editor. Confirm source terms and obtain permissions before expanding commercial reuse.
+## Publication limits
 
-The system does not send email, collect signups, charge readers, accept sponsorship, or guarantee profit. The single Droplet has not been load-tested for millions of readers.
+Public issues link to original reporting and show headlines, source names, and links. They do not republish full articles, RSS excerpts, or source images. Optional AI summaries require `OPENAI_API_KEY` and explicit `--ai` or `NEWSLETTER_AI_PUBLIC_SUMMARIES=true`; usage may incur API charges. AI remains off by default. Headlines and generated summaries are not independently fact-checked or reviewed by an editor. Check each publisher’s terms and obtain permission before adding feeds or reusing their material in a commercial product.
 
-## Deployment and operations
+## Operations
 
-The isolated Droplet runs Ubuntu, Nginx, and Python's standard library. The collector runs under restricted account `newsletterd`; public issues live in `/var/lib/newsletters/issues`, outside the Git checkout. The app fast-forwards from the public GitHub main branch before its daily collection. The installer refuses to replace an existing non-symlink `/var/www/newsletters` path. Run it only on the dedicated newsletter Droplet.
-
-On the server, inspect logs with `sudo tail -n 100 /var/log/newsletters-daily.log`; check services with `sudo systemctl status nginx cron`. To manually run a collection: `cd /opt/newsletters && sudo /usr/bin/python3 newsletter.py --draft --publish-public`.
+The isolated Droplet runs Ubuntu and Nginx. The collector runs under restricted account `newsletterd`; published issues live in `/var/lib/newsletters/issues`. Check logs with `sudo tail -n 100 /var/log/newsletters-daily.log` and services with `sudo systemctl status nginx cron`. To run manually: `cd /opt/newsletters && sudo /usr/bin/python3 newsletter.py --draft --publish-public`.

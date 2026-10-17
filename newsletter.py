@@ -471,6 +471,7 @@ def publish_issue(articles: list[dict], errors: list[str], story_summaries: dict
             f"<li>{html.escape(clean_text(error, 300))}</li>" for error in errors[:10]) + "</ul></details>")
     issue_name = f"issue-{stamp}.html"
     issue_html = ("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+                  "<script src=\"/adsense-config.js\"></script><script defer src=\"/adsense.js\"></script>"
                   f"<title>World Desk Daily Brief — {stamp}</title><style>"
                   "body{font:17px/1.65 system-ui,sans-serif;color:#18251f;background:#f6f7f2;margin:0}"
                   "main{max-width:850px;margin:auto;padding:2rem 1.2rem 5rem}header{background:#10231f;color:#fff;padding:2rem max(1.2rem,calc((100vw - 850px)/2))}"
@@ -478,7 +479,8 @@ def publish_issue(articles: list[dict], errors: list[str], story_summaries: dict
                   ".notice,details{background:#e9eee8;padding:1rem;border-radius:12px}article{background:#fff;margin:1rem 0;padding:1.25rem 1.5rem;border-radius:14px;border:1px solid #dce2da}"
                   "h2{font-size:1.35rem;line-height:1.3}a{color:#125d46}footer{margin-top:2rem;color:#58645d;font-size:.9rem}</style></head><body>"
                   f"<header><a href=\"/\" style=\"color:white\">World Desk</a><p>Daily global briefing · {stamp}</p><h1>What’s moving around the world</h1></header>"
-                  f"<main>{''.join(notices)}{''.join(cards)}<footer>Source links are provided for readers to review the original reporting. "
+                  f"<main>{''.join(notices)}{''.join(cards)}<footer>Free to read. Advertising may appear after an ad network approves this site. "
+                  "Source links are provided for readers to review the original reporting. "
                   "Publication time and coverage metadata may be incomplete. GDELT data source: "
                   "<a href=\"https://www.gdeltproject.org/\">The GDELT Project</a>.</footer></main></body></html>")
     issue_path = PUBLIC_ISSUES / issue_name

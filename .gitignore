@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+*.sqlite3
+logs/
+drafts/
+private/
+.do/*.local.yaml
+

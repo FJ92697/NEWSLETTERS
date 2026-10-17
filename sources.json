@@ -1,2 +1,65 @@
-{"global_discovery":{"enabled":true,"timespan":"24h","maxrecords_per_search":25,"max_exact_us_checks":8,"topics":["artificial intelligence","fintech","semiconductor"]},"feeds":[{"name":"Hacker News RSS (community feed; not an official publication)","url":"https://news.ycombinator.com/rss","enabled":true,"include_keywords":["startup","enterprise","artificial intelligence","software","open source","cloud","security","cybersecurity","semiconductor","data center","venture","funding","IPO","fintech","market","sales","CRM","datacenter","DeepSeek","model","chip","solar","nuclear","battery","renewable","revenue","OpenAI","Google","Microsoft","Meta","Anthropic"]}]}
-
+{
+  "global_discovery": {
+    "enabled": true,
+    "timespan": "24h",
+    "maxrecords_per_search": 50,
+    "topics": [
+      "artificial intelligence",
+      "business",
+      "climate change",
+      "conflict",
+      "cybersecurity",
+      "economic policy",
+      "elections",
+      "energy",
+      "fintech",
+      "international relations",
+      "public health",
+      "science",
+      "semiconductor",
+      "technology",
+      "trade"
+    ],
+    "compare_us": true
+  },
+  "feeds": [
+    {
+      "name": "Hacker News RSS (community feed; not an official publication)",
+      "url": "https://news.ycombinator.com/rss",
+      "enabled": true,
+      "include_keywords": [
+        "startup",
+        "enterprise",
+        "artificial intelligence",
+        "software",
+        "open source",
+        "cloud",
+        "security",
+        "cybersecurity",
+        "semiconductor",
+        "data center",
+        "venture",
+        "funding",
+        "IPO",
+        "fintech",
+        "market",
+        "sales",
+        "CRM",
+        "datacenter",
+        "DeepSeek",
+        "model",
+        "chip",
+        "solar",
+        "nuclear",
+        "battery",
+        "renewable",
+        "revenue",
+        "OpenAI",
+        "Google",
+        "Microsoft",
+        "Meta",
+        "Anthropic"
+      ]
+    }
+  ]
+}

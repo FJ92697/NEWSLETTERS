@@ -569,8 +569,14 @@ def main() -> int:
                         help="upload this run's draft and preview privately to configured DigitalOcean Spaces")
     parser.add_argument("--publish-public", action="store_true",
                         help="publish a source-linked briefing without copying RSS excerpts or source images")
+    parser.add_argument("--wordpress", choices=("draft", "publish"),
+                        help="also create today's issue in the explicitly configured WordPress site")
     args = parser.parse_args()
     try:
+        wp_client = None
+        if args.wordpress:
+            from wordpress_publish import WordPressClient, build_issue, publish_once
+            wp_client = WordPressClient.from_environment()
         feed_articles, errors = collect()
         watched, watch_errors = collect_global_watch()
         articles = mix_story_sources(feed_articles, watched)
@@ -582,19 +588,26 @@ def main() -> int:
             draft = generate_with_openai(draft)
             print("AI editing enabled; API usage may incur charges.")
         else:
-            print("No OPENAI_API_KEY found; saved a source-linked RSS digest without an AI call.")
+            print("AI editing is disabled; saved a source-linked digest without an AI call.")
         md_path, html_path = write_draft(draft)
         archived_keys = archive_draft_to_spaces((md_path, html_path)) if args.archive_to_spaces else []
         ai_public = args.ai or os.environ.get("NEWSLETTER_AI_PUBLIC_SUMMARIES", "").strip().casefold() in {"1", "true", "yes"}
-        summaries = generate_story_summaries(articles) if ai_public and args.publish_public else None
+        summaries = generate_story_summaries(articles) if ai_public and (args.publish_public or args.wordpress) else None
         if summaries is not None:
             print("Original AI summaries enabled for every collected story; API usage may incur charges.")
         published_path = publish_issue(articles, errors, summaries) if args.publish_public else None
+        wordpress_note = ""
+        if wp_client is not None:
+            issue = build_issue(articles, dt.datetime.now().astimezone().date().isoformat(),
+                                summaries, degraded=bool(errors))
+            state_dir = Path(os.environ.get("WORDPRESS_STATE_DIR", str(ROOT / "private" / "wordpress-state")))
+            result = publish_once(wp_client, issue, args.wordpress, state_dir)
+            wordpress_note = f" WordPress {result['status']}: {result['link']} ({result['action']})."
         archive_note = f" Private archive keys: {', '.join(archived_keys)}." if archived_keys else ""
         publish_note = f" Public issue: {published_path}." if published_path else ""
         summary = (f"Collected {len(articles)} feed items; errors={len(errors)}; "
                    f"draft={md_path}; preview={html_path}; ai={args.ai}. "
-                   f"Nothing was emailed, charged, or paid out.{archive_note}{publish_note}")
+                   f"Nothing was emailed, charged, or paid out.{archive_note}{publish_note}{wordpress_note}")
         print(summary)
         if not args.no_log:
             append_run_log(summary)

@@ -42,3 +42,31 @@ AdSense approval is not guaranteed. The current issue format is mostly source-li
 ## Operations
 
 The isolated Droplet runs Ubuntu and Nginx. The collector runs under restricted account `newsletterd`; published issues live in `/var/lib/newsletters/issues`. Check logs with `sudo tail -n 100 /var/log/newsletters-daily.log` and services with `sudo systemctl status nginx cron`. To run manually: `cd /opt/newsletters && sudo /usr/bin/python3 newsletter.py --draft --publish-public`.
+
+## WordPress connection
+
+The opt-in WordPress publisher is implemented and covered by offline tests. It has not been connected to a live WordPress installation. It does not install WordPress, buy hosting, modify another website, activate ads, or change the existing schedule.
+
+Use a separate WordPress installation under the hosting plan that has an available website slot. On the new site, use a dedicated Author account and its revocable application password. Supply `WORDPRESS_SITE_URL`, `WORDPRESS_USERNAME`, and `WORDPRESS_APPLICATION_PASSWORD` as runtime environment variables to the collector; never commit credentials. `WORDPRESS_SITE_URL` is the exact final HTTPS site address, including a WordPress subdirectory if applicable. Redirects are refused to prevent forwarding authentication credentials.
+
+`WORDPRESS_STATE_DIR` selects a persistent directory writable by the collector. The default is `private/wordpress-state`, ignored by Git. Keep it between deployments and include it in private backups. Run only one collector/state directory for each WordPress site.
+
+With those values configured:
+
+```bash
+# Create a private draft first and inspect its blocks in WordPress.
+python newsletter.py --draft --wordpress draft
+
+# For normal daily publication after the live setup has been verified:
+python newsletter.py --draft --publish-public --wordpress publish
+```
+
+Each date has one deterministic issue slug. Repeat runs read and preserve an existing matching issue rather than overwrite editorial changes. A draft is not silently promoted to a published post: publish that reviewed draft in WordPress before using `--wordpress publish` for the same date. Future dates create new posts automatically when the command is added to the scheduler.
+
+The integration authenticates the author, checks permissions, creates core paragraph/heading blocks, and reads the saved post back to check its status and content. Source excerpts and images are excluded. Original AI summaries are optional and require the existing AI setting and API credentials. No AI call is enabled by adding WordPress alone.
+
+If a write has an uncertain outcome, a durable pending marker blocks another create. A later run can reconcile a matching post through a read. If it cannot, inspect the WordPress posts, drafts, and trash before clearing that single issue's marker. Never delete the whole state directory to bypass an error. A stale `.lock` file likewise needs confirmation that the earlier publisher has stopped before removal. The lock protects one collector host, not multiple independent servers.
+
+Ad configuration is separate from posting. The static site's disabled AdSense files do not automatically install an ad integration in WordPress. Use the approved publisher's official WordPress integration, actual publisher ID, required consent configuration, and site approval before enabling ads. Site traffic and earnings require separate dashboard evidence.
+
+Official API references: [WordPress posts](https://developer.wordpress.org/rest-api/reference/posts/), [application password authentication](https://developer.wordpress.org/rest-api/using-the-rest-api/authentication/), and [current user permissions](https://developer.wordpress.org/rest-api/reference/users/).

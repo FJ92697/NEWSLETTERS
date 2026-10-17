@@ -172,7 +172,7 @@ class NewsletterTests(unittest.TestCase):
                 "source_country": "Japan", "topic": "topic", "gdelt_seen": "today",
                 "language": "Japanese", "us_topic_result_count": 0, "us_topic_examples": []}
         digest = newsletter.make_digest([item], [])
-        self.assertIn("does not prove that no U.S. outlet has covered the story", digest)
+        self.assertIn("does not prove no U.S. outlet covered the story", digest)
         self.assertIn("not original publication time", digest)
 
     def test_gdelt_rate_limit_stops_remaining_searches(self):
@@ -187,7 +187,44 @@ class NewsletterTests(unittest.TestCase):
                 articles, errors = newsletter.collect_global_watch()
         self.assertEqual(articles, [])
         self.assertEqual(search.call_count, 1)
-        self.assertTrue(any("remaining topic searches were stopped" in message for message in errors))
+        self.assertTrue(any("global discovery was skipped" in message for message in errors))
+
+    def test_global_watch_uses_two_bounded_combined_queries(self):
+        with tempfile.TemporaryDirectory() as folder:
+            config = Path(folder) / "sources.json"
+            config.write_text(json.dumps({"global_discovery": {
+                "enabled": True, "topics": ["climate change", "technology"],
+                "maxrecords_per_search": 40, "compare_us": True
+            }}), encoding="utf-8")
+            worldwide = [{"title": "Climate technology", "url": "https://example.com/a",
+                          "source": "Example", "source_country": "Japan"}]
+            with patch.object(newsletter, "SOURCES", config), \
+                 patch.object(newsletter, "gdelt_search", side_effect=[worldwide, []]) as search:
+                articles, errors = newsletter.collect_global_watch()
+        self.assertEqual(search.call_count, 2)
+        self.assertIn('"climate change" OR technology', search.call_args_list[0].args[0])
+        self.assertIn("sourcecountry:unitedstates", search.call_args_list[1].args[0])
+        self.assertEqual(search.call_args_list[0].args[2], 40)
+        self.assertEqual(errors, [])
+        self.assertFalse(articles[0]["us_exact_check_performed"])
+
+    def test_rate_limit_retry_obeys_retry_after_once(self):
+        payload = b'{"ok": true}'
+        failure = newsletter.urllib.error.HTTPError(
+            "https://example.com", 429, "Too Many Requests", {"Retry-After": "0"}, None)
+
+        class FakeResponse:
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self, _limit): return payload
+
+        request = newsletter.urllib.request.Request("https://example.com")
+        with patch.object(newsletter.urllib.request, "urlopen", side_effect=[failure, FakeResponse()]) as urlopen, \
+             patch.object(newsletter.time, "sleep") as sleep:
+            result = newsletter.read_with_rate_limit_retry(request, 10)
+        self.assertEqual(result, payload)
+        self.assertEqual(urlopen.call_count, 2)
+        sleep.assert_called_once_with(0)
 
     def test_spaces_archive_uploads_private_objects(self):
         uploads = []

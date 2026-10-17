@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="An independent, source-linked briefing on international business and technology developments.">
+  <meta name="theme-color" content="#10231f">
+  <title>World Desk — Global developments, clearly explained</title>
+  <style>
+    :root{color-scheme:light;--ink:#10231f;--muted:#52645d;--paper:#f5f4ef;--card:#fff;--line:#d9ded8;--green:#176c50;--gold:#f2c14e}
+    *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.6 system-ui,-apple-system,Segoe UI,sans-serif}
+    a{color:var(--green)}.top{background:var(--ink);color:#fff;padding:1rem max(1.25rem,calc((100vw - 1120px)/2));display:flex;justify-content:space-between;align-items:center;gap:1rem}
+    .brand{font-weight:800;letter-spacing:.08em;text-transform:uppercase}.top a{color:#fff;text-decoration:none}.hero{padding:clamp(3rem,9vw,7rem) max(1.25rem,calc((100vw - 1120px)/2));background:linear-gradient(125deg,#10231f,#194c3c);color:white}
+    .eyebrow{color:var(--gold);font-size:.82rem;font-weight:750;letter-spacing:.16em;text-transform:uppercase}.hero h1{max-width:850px;font-size:clamp(2.7rem,7vw,5.4rem);line-height:1.02;letter-spacing:-.055em;margin:.8rem 0 1.25rem}.hero p{max-width:650px;color:#dce8e1;font-size:1.2rem}
+    main{max-width:1120px;margin:0 auto;padding:3rem 1.25rem 5rem}.row{display:flex;justify-content:space-between;align-items:end;gap:1rem;margin-bottom:1.25rem}.row h2{font-size:1.8rem;margin:0}.tag{border:1px solid var(--line);border-radius:999px;padding:.25rem .7rem;color:var(--muted);font-size:.84rem}
+    #issues{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:1rem}.issue,.empty{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:1.35rem;box-shadow:0 8px 28px #10231f0a}.issue h3{line-height:1.25;margin:.7rem 0}.issue p{color:var(--muted);margin:.5rem 0 1rem}.issue a{font-weight:700;text-decoration-thickness:1px;text-underline-offset:3px}.empty{grid-column:1/-1;padding:2rem}.empty h3{margin-top:0}.footer{border-top:1px solid var(--line);margin-top:3rem;padding-top:1rem;color:var(--muted);font-size:.9rem}
+    @media(max-width:560px){.row{align-items:start;flex-direction:column}.hero p{font-size:1.05rem}}
+  </style>
+</head>
+<body>
+  <header class="top"><a class="brand" href="/">World Desk</a><span>Independent global briefing</span></header>
+  <section class="hero"><div class="eyebrow">International business & technology</div><h1>Global developments.<br>Clear context.</h1><p>Concise, source-linked briefings that help readers understand what is happening around the world and why it may matter.</p></section>
+  <main>
+    <div class="row"><h2>Latest public issues</h2><span class="tag">Open access</span></div>
+    <section id="issues" aria-live="polite"><div class="empty"><h3>Loading issues…</h3></div></section>
+    <p class="footer">Stories link to their original sources. This automated sample is not exhaustive or independently fact-checked. Search coverage is not proof that a story was absent from U.S. media. Images are omitted unless reuse rights are confirmed. GDELT discovery uses <a href="https://www.gdeltproject.org/">The GDELT Project</a>.</p>
+  </main>
+  <script>
+    const target = document.querySelector('#issues');
+    const safeText = (tag, value, className) => { const node=document.createElement(tag); if(className) node.className=className; node.textContent=String(value??''); return node; };
+    fetch('/issues/index.json', {cache:'no-store'}).then(r=>{if(!r.ok)throw Error('Issue list unavailable');return r.json();}).then(items=>{
+      target.replaceChildren();
+      if(!Array.isArray(items)||items.length===0){target.append(safeText('div','No public issues yet. New editions will appear here after editorial review.','empty'));return;}
+      for(const item of items.slice(0,30)){
+        if(!item||typeof item.title!=='string'||typeof item.url!=='string'||!item.url.startsWith('/issues/'))continue;
+        const card=safeText('article','','issue');card.append(safeText('div',item.date,'eyebrow'),safeText('h3',item.title),safeText('p',item.summary));
+        const link=document.createElement('a');link.href=item.url;link.textContent='Read this issue →';card.append(link);target.append(card);
+      }
+      if(!target.childElementCount)target.append(safeText('div','No public issues yet. New editions will appear here after editorial review.','empty'));
+    }).catch(()=>target.replaceChildren(safeText('div','The issue list is temporarily unavailable. Please try again shortly.','empty')));
+  </script>
+</body>
+</html>
+

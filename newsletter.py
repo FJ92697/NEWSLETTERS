@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+from email.utils import parsedate_to_datetime
 import html
 import json
 import os
 import re
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -26,7 +28,7 @@ DRAFTS = ROOT / "drafts"
 PUBLIC_ISSUES = Path(os.environ.get("NEWSLETTER_PUBLIC_ISSUES", str(ROOT / "site" / "issues")))
 PUBLIC_INDEX = PUBLIC_ISSUES / "index.json"
 MAX_FEED_BYTES = 2_000_000
-MAX_ARTICLES_PER_FEED = 12
+MAX_ARTICLES_PER_FEED = 50
 MAX_ARTICLES_TOTAL = 30
 GDELT_ENDPOINT = "https://api.gdeltproject.org/api/v2/doc/doc"
 
@@ -109,8 +111,7 @@ def gdelt_search(query: str, timespan: str, maxrecords: int = 30) -> list[dict]:
         f"{GDELT_ENDPOINT}?{params}",
         headers={"User-Agent": "EnterpriseNewsletterResearch/1.0 (+RSS/GDELT reader)",
                  "Accept": "application/json"})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        payload = response.read(MAX_FEED_BYTES + 1)
+    payload = read_with_rate_limit_retry(request, timeout=30)
     if len(payload) > MAX_FEED_BYTES:
         raise ValueError("GDELT response exceeded the 2 MB safety limit")
     result = json.loads(payload.decode("utf-8"))
@@ -143,8 +144,35 @@ def gdelt_search(query: str, timespan: str, maxrecords: int = 30) -> list[dict]:
     return clean
 
 
+def read_with_rate_limit_retry(request: urllib.request.Request, timeout: int) -> bytes:
+    """Retry one 429 only when the upstream provides a short Retry-After value."""
+    for attempt in range(2):
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                return response.read(MAX_FEED_BYTES + 1)
+        except urllib.error.HTTPError as exc:
+            if exc.code != 429 or attempt:
+                raise
+            retry_after = exc.headers.get("Retry-After") if exc.headers else None
+            if not retry_after:
+                raise
+            try:
+                delay = float(retry_after)
+            except ValueError:
+                try:
+                    retry_at = parsedate_to_datetime(retry_after)
+                    delay = max(0.0, (retry_at - dt.datetime.now(retry_at.tzinfo)).total_seconds())
+                except (TypeError, ValueError, OverflowError):
+                    raise exc
+            if delay > 30:
+                raise exc
+            exc.close()
+            time.sleep(delay)
+    raise RuntimeError("Rate-limited request could not be completed")
+
+
 def collect_global_watch() -> tuple[list[dict], list[str]]:
-    """Collect topic-level global results and a separate US-coverage search."""
+    """Collect a bounded global search and one broad U.S. comparison query."""
     config = json.loads(SOURCES.read_text(encoding="utf-8"))
     discovery = config.get("global_discovery", {}) if isinstance(config, dict) else {}
     if not discovery.get("enabled", False):
@@ -154,54 +182,44 @@ def collect_global_watch() -> tuple[list[dict], list[str]]:
         raise ValueError("global_discovery.topics must be an array")
     timespan = str(discovery.get("timespan", "24h"))
     limit = int(discovery.get("maxrecords_per_search", 25))
-    global_results, errors = [], []
-    story_check_budget = max(0, min(int(discovery.get("max_exact_us_checks", 8)), 12))
-    exact_checks = 0
-    rate_limited = False
-    for raw_topic in topics[:8]:
-        topic = str(raw_topic).strip()
-        if not topic or len(topic) > 120:
-            continue
+    errors = []
+    valid_topics = [str(topic).strip() for topic in topics[:20]
+                    if str(topic).strip() and len(str(topic).strip()) <= 120]
+    if not valid_topics:
+        return [], ["GDELT global search has no valid configured topics."]
+    terms = ['"' + topic.replace('"', ' ') + '"' if " " in topic else topic for topic in valid_topics]
+    query = "(" + " OR ".join(terms) + ")"
+    try:
+        global_results = gdelt_search(query, timespan, limit)
+    except urllib.error.HTTPError as exc:
+        message = ("GDELT returned HTTP 429; global discovery was skipped for this run." if exc.code == 429
+                   else f"GDELT global search: HTTP {exc.code}")
+        return [], [message]
+    except (urllib.error.URLError, TimeoutError, ValueError, OSError, json.JSONDecodeError) as exc:
+        return [], [f"GDELT global search: {exc}"]
+
+    us_results = []
+    if discovery.get("compare_us", True):
         try:
-            worldwide = gdelt_search(topic, timespan, limit)
-            # GDELT source-country filtering is a comparison signal, not proof
-            # that no US publisher covered the event.
-            us_results = gdelt_search(f'({topic}) sourcecountry:unitedstates', timespan, limit)
-            us_by_title = {normalize_title(item["title"]): item for item in us_results}
-            for item in worldwide:
-                item["topic"] = topic
-                item["us_coverage_matches"] = []
-                item["us_exact_title_results"] = []
-                normalized = normalize_title(item["title"])
-                match = us_by_title.get(normalized)
-                if match:
-                    item["us_coverage_matches"].append(match)
-                item["us_topic_result_count"] = len(us_results)
-                item["us_topic_examples"] = us_results[:3]
-                if (item["source_country"].casefold() not in {"united states", "united states of america", "usa"}
-                        and exact_checks < story_check_budget):
-                    exact_checks += 1
-                    try:
-                        exact_query = '"' + item["title"].replace('"', ' ') + '" sourcecountry:unitedstates'
-                        item["us_exact_title_results"] = gdelt_search(exact_query, timespan, 5)
-                    except urllib.error.HTTPError as exc:
-                        if exc.code == 429:
-                            errors.append("GDELT returned HTTP 429 during a U.S. headline check; remaining GDELT searches were stopped to respect its rate limit.")
-                            rate_limited = True
-                            break
-                        errors.append(f"GDELT U.S. headline check for '{item['title'][:80]}': HTTP {exc.code}")
-                    except (urllib.error.URLError, TimeoutError, ValueError, OSError, json.JSONDecodeError) as exc:
-                        errors.append(f"GDELT U.S. headline check for '{item['title'][:80]}': {exc}")
-                global_results.append(item)
-            if rate_limited:
-                break
+            # This broad comparison is only a search signal; it cannot prove a story was not covered in the U.S.
+            us_results = gdelt_search(f"{query} sourcecountry:unitedstates", timespan, limit)
         except urllib.error.HTTPError as exc:
-            if exc.code == 429:
-                errors.append("GDELT returned HTTP 429; remaining topic searches were stopped to respect its rate limit.")
-                break
-            errors.append(f"GDELT topic '{topic}': HTTP {exc.code}")
+            errors.append("GDELT returned HTTP 429 for the broad U.S. comparison; international results were kept."
+                          if exc.code == 429 else f"GDELT U.S. comparison search: HTTP {exc.code}")
         except (urllib.error.URLError, TimeoutError, ValueError, OSError, json.JSONDecodeError) as exc:
-            errors.append(f"GDELT topic '{topic}': {exc}")
+            errors.append(f"GDELT U.S. comparison search: {exc}")
+    us_by_title = {normalize_title(item["title"]): item for item in us_results}
+    topic_label = ", ".join(valid_topics)
+    for item in global_results:
+        item["topic"] = topic_label
+        item["us_coverage_matches"] = []
+        item["us_exact_title_results"] = []
+        item["us_exact_check_performed"] = False
+        match = us_by_title.get(normalize_title(item["title"]))
+        if match:
+            item["us_coverage_matches"].append(match)
+        item["us_topic_result_count"] = len(us_results)
+        item["us_topic_examples"] = us_results[:3]
     # Keep one record per canonical URL, favoring entries with a known country.
     unique = {}
     for item in global_results:
@@ -248,9 +266,12 @@ def make_digest(articles: list[dict], errors: list[str]) -> str:
                 found = exact_matches or us_matches
                 sections.append("U.S. exact-headline search returned: " + "; ".join(
                     f"{match['source']}: {match['url']}" for match in found[:5]))
-            else:
+            elif item.get("us_exact_check_performed"):
                 sections.append("U.S. exact-headline search: no exact-title result returned in this query. "
                                 "This does not prove that no U.S. outlet has covered the story; wording can differ and index coverage is incomplete.")
+            else:
+                sections.append("No exact-title U.S. search was run. The broad U.S. results below are comparison leads only; "
+                                "they cannot establish whether U.S. coverage exists.")
             sections.append(f"U.S. broad topic query returned up to {item.get('us_topic_result_count', 0)} result(s) "
                             f"(configured per-query cap applies); compare manually:")
             for match in item.get("us_topic_examples", []):

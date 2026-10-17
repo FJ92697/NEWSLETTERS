@@ -30,13 +30,13 @@
     const safeText = (tag, value, className) => { const node=document.createElement(tag); if(className) node.className=className; node.textContent=String(value??''); return node; };
     fetch('/issues/index.json', {cache:'no-store'}).then(r=>{if(!r.ok)throw Error('Issue list unavailable');return r.json();}).then(items=>{
       target.replaceChildren();
-      if(!Array.isArray(items)||items.length===0){target.append(safeText('div','No public issues yet. New editions will appear here after editorial review.','empty'));return;}
+      if(!Array.isArray(items)||items.length===0){target.append(safeText('div','No issues have been published yet. A new issue appears after a successful daily collection.','empty'));return;}
       for(const item of items.slice(0,30)){
         if(!item||typeof item.title!=='string'||typeof item.url!=='string'||!item.url.startsWith('/issues/'))continue;
         const card=safeText('article','','issue');card.append(safeText('div',item.date,'eyebrow'),safeText('h3',item.title),safeText('p',item.summary));
         const link=document.createElement('a');link.href=item.url;link.textContent='Read this issue →';card.append(link);target.append(card);
       }
-      if(!target.childElementCount)target.append(safeText('div','No public issues yet. New editions will appear here after editorial review.','empty'));
+      if(!target.childElementCount)target.append(safeText('div','No issues have been published yet. A new issue appears after a successful daily collection.','empty'));
     }).catch(()=>target.replaceChildren(safeText('div','The issue list is temporarily unavailable. Please try again shortly.','empty')));
   </script>
 </body>

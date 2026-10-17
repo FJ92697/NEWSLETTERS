@@ -58,11 +58,50 @@ class NewsletterTests(unittest.TestCase):
             self.assertIn("headline", rendered)
             self.assertNotIn("<b>headline</b>", rendered)
             self.assertIn("https://example.com/story", rendered)
+            self.assertNotIn("A" * 100, rendered)
+            self.assertIn("Open the original report for the story details.", rendered)
             self.assertNotIn("javascript:alert(1)", rendered)
             self.assertIn("does not prove a story has not appeared in U.S. media", rendered)
             self.assertIn("Source availability notes", rendered)
             self.assertEqual(len(entries), 1)
             self.assertEqual(entries[0]["url"], f"/issues/{issue_path.name}")
+
+    def test_public_issue_uses_original_summary_not_feed_excerpt(self):
+        with tempfile.TemporaryDirectory() as folder:
+            issues = Path(folder) / "issues"
+            url = "https://example.com/report"
+            item = {"title": "Headline", "url": url, "source": "Example",
+                    "summary": "Do not publish this syndicated feed excerpt."}
+            with patch.object(newsletter, "PUBLIC_ISSUES", issues), \
+                 patch.object(newsletter, "PUBLIC_INDEX", issues / "index.json"):
+                page = newsletter.publish_issue([item], [], {url: "An independently worded brief based on the source listing."})
+            rendered = page.read_text(encoding="utf-8")
+            self.assertIn("An independently worded brief", rendered)
+            self.assertNotIn("Do not publish this syndicated feed excerpt", rendered)
+
+    def test_ai_story_summary_requires_every_collected_item(self):
+        articles = [{"title": "One", "url": "https://one.example", "source": "One"},
+                    {"title": "Two", "url": "https://two.example", "source": "Two"}]
+        with patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False):
+            with self.assertRaisesRegex(RuntimeError, "OPENAI_API_KEY"):
+                newsletter.generate_story_summaries(articles)
+
+    def test_ai_story_summary_rejects_missing_story(self):
+        response_body = json.dumps({"output": [{"type": "message", "content": [
+            {"type": "output_text", "text": json.dumps({"summaries": [{"id": 0, "summary": "First summary."}]})}
+        ]}]}).encode()
+
+        class FakeResponse:
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self, _limit): return response_body
+
+        articles = [{"title": "One", "url": "https://one.example", "source": "One"},
+                    {"title": "Two", "url": "https://two.example", "source": "Two"}]
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}), \
+             patch.object(newsletter.urllib.request, "urlopen", return_value=FakeResponse()):
+            with self.assertRaisesRegex(RuntimeError, "exactly one summary per collected story"):
+                newsletter.generate_story_summaries(articles)
 
     def test_public_issue_keeps_existing_index_when_no_articles(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -157,4 +196,3 @@ class NewsletterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

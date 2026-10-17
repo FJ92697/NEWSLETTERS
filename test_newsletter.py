@@ -103,6 +103,30 @@ class NewsletterTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "exactly one summary per collected story"):
                 newsletter.generate_story_summaries(articles)
 
+    def test_ai_story_summary_maps_every_item_to_its_source_url(self):
+        summaries = {"summaries": [
+            {"id": 0, "summary": "An original brief for the first report."},
+            {"id": 1, "summary": "A separate original brief for the second report."},
+        ]}
+        response_body = json.dumps({"output": [{"type": "message", "content": [
+            {"type": "output_text", "text": json.dumps(summaries)}
+        ]}]}).encode()
+
+        class FakeResponse:
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self, _limit): return response_body
+
+        articles = [{"title": "One", "url": "https://one.example", "source": "One"},
+                    {"title": "Two", "url": "https://two.example", "source": "Two"}]
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}), \
+             patch.object(newsletter.urllib.request, "urlopen", return_value=FakeResponse()):
+            result = newsletter.generate_story_summaries(articles)
+        self.assertEqual(result, {
+            "https://one.example": "An original brief for the first report.",
+            "https://two.example": "A separate original brief for the second report.",
+        })
+
     def test_public_issue_keeps_existing_index_when_no_articles(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

@@ -28,8 +28,9 @@ DRAFTS = ROOT / "drafts"
 PUBLIC_ISSUES = Path(os.environ.get("NEWSLETTER_PUBLIC_ISSUES", str(ROOT / "site" / "issues")))
 PUBLIC_INDEX = PUBLIC_ISSUES / "index.json"
 MAX_FEED_BYTES = 2_000_000
-MAX_ARTICLES_PER_FEED = 50
-MAX_ARTICLES_TOTAL = 30
+MAX_ARTICLES_PER_FEED = 100
+MAX_ARTICLES_TOTAL = 50
+MAX_GDELT_RECORDS = 250
 GDELT_ENDPOINT = "https://api.gdeltproject.org/api/v2/doc/doc"
 
 
@@ -105,8 +106,8 @@ def collect() -> tuple[list[dict], list[str]]:
 def gdelt_search(query: str, timespan: str, maxrecords: int = 30) -> list[dict]:
     """Search GDELT's monitored coverage. Returned images are references only."""
     params = urlencode({"query": query, "mode": "artlist", "format": "json",
-                       "maxrecords": max(1, min(int(maxrecords), 50)),
-                       "timespan": timespan, "sort": "datedesc"})
+                       "maxrecords": max(1, min(int(maxrecords), MAX_GDELT_RECORDS)),
+                       "timespan": timespan, "sort": "hybridrel"})
     request = urllib.request.Request(
         f"{GDELT_ENDPOINT}?{params}",
         headers={"User-Agent": "EnterpriseNewsletterResearch/1.0 (+RSS/GDELT reader)",
@@ -226,7 +227,30 @@ def collect_global_watch() -> tuple[list[dict], list[str]]:
         key = item["url"].rstrip("/").casefold()
         if key not in unique or unique[key]["source_country"] == "Unknown":
             unique[key] = item
-    return list(unique.values())[:MAX_ARTICLES_TOTAL], errors
+    return list(unique.values()), errors
+
+
+def mix_story_sources(feed_articles: list[dict], global_articles: list[dict]) -> list[dict]:
+    """Interleave feed and GDELT results so one feed cannot crowd out other coverage."""
+    result = []
+    seen_urls = set()
+    seen_titles = set()
+    left, right = list(feed_articles), list(global_articles)
+    while (left or right) and len(result) < MAX_ARTICLES_TOTAL:
+        # Alternate between RSS material and GDELT's relevance-ranked list.
+        for bucket in (left, right):
+            while bucket:
+                item = bucket.pop(0)
+                url = str(item.get("url", "")).rstrip("/").casefold()
+                title = normalize_title(str(item.get("title", "")))
+                if not url or url in seen_urls or (title and title in seen_titles):
+                    continue
+                seen_urls.add(url)
+                if title:
+                    seen_titles.add(title)
+                result.append(item)
+                break
+    return result
 
 
 def normalize_title(title: str) -> str:
@@ -234,7 +258,7 @@ def normalize_title(title: str) -> str:
 
 
 def make_digest(articles: list[dict], errors: list[str]) -> str:
-    topic = "Startup and technology market intelligence"
+    topic = "World Desk: top stories across the world"
     sections = [f"# {topic}", f"Draft date: {dt.date.today().isoformat()}",
                 "", "This is an automatically assembled draft. Verify each source and every claim before publishing.", ""]
     if not articles:
@@ -410,7 +434,7 @@ def publish_issue(articles: list[dict], errors: list[str], story_summaries: dict
     stamp = dt.datetime.now().astimezone().strftime("%Y-%m-%d")
     cards = []
     seen = set()
-    for item in articles[:30]:
+    for item in articles[:MAX_ARTICLES_TOTAL]:
         url = str(item.get("url", "")).strip()
         parsed = urlparse(url)
         title = clean_text(str(item.get("title", "")), 300)
@@ -543,9 +567,9 @@ def main() -> int:
                         help="publish a source-linked briefing without copying RSS excerpts or source images")
     args = parser.parse_args()
     try:
-        articles, errors = collect()
+        feed_articles, errors = collect()
         watched, watch_errors = collect_global_watch()
-        articles.extend(watched)
+        articles = mix_story_sources(feed_articles, watched)
         errors.extend(watch_errors)
         if errors:
             print("Feed notes:\n" + "\n".join(errors), file=sys.stderr)

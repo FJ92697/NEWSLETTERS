@@ -1,8 +1,8 @@
-"""Create a daily, source-linked newsletter draft from configured RSS feeds.
+"""Collect configured RSS/GDELT sources, write a private draft, and optionally publish a public issue.
 
-Network effects are limited to RSS/GDELT retrieval, optional OpenAI editing, and
-an explicitly requested private DigitalOcean Spaces draft archive. This script
-never sends email, charges readers, publishes drafts, or moves money.
+Public publishing is explicitly enabled with --publish-public. Optional AI editing and
+private DigitalOcean Spaces archiving are separate operations. This script never sends
+email, charges readers, or moves money.
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from urllib.parse import urlencode, urlparse
 ROOT = Path(__file__).resolve().parent
 SOURCES = ROOT / "sources.json"
 DRAFTS = ROOT / "drafts"
-PUBLIC_ISSUES = ROOT / "site" / "issues"
+PUBLIC_ISSUES = Path(os.environ.get("NEWSLETTER_PUBLIC_ISSUES", str(ROOT / "site" / "issues")))
 PUBLIC_INDEX = PUBLIC_ISSUES / "index.json"
 MAX_FEED_BYTES = 2_000_000
 MAX_ARTICLES_PER_FEED = 12
@@ -452,7 +452,7 @@ def append_run_log(message: str) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Create a source-linked newsletter draft from RSS feeds.")
+    parser = argparse.ArgumentParser(description="Collect configured sources, write a private draft, and optionally publish a public issue.")
     parser.add_argument("--draft", action="store_true", help="fetch RSS sources and write today's draft (default)")
     parser.add_argument("--ai", action="store_true", help="use the OpenAI API for an edited draft; may incur API charges")
     parser.add_argument("--no-log", action="store_true", help="do not append a run summary to logs/newsletter.log")

@@ -167,6 +167,33 @@ class NewsletterTests(unittest.TestCase):
         self.assertEqual(records[0]["source_country"], "France")
         self.assertEqual(records[0]["image_reference"], "")
 
+    def test_gdelt_search_requests_full_documented_batch_and_relevance_order(self):
+        payload = b'{"articles": []}'
+
+        class FakeResponse:
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self, _limit): return payload
+
+        with patch.object(newsletter.urllib.request, "urlopen", return_value=FakeResponse()) as urlopen:
+            newsletter.gdelt_search("science OR culture", "24h", 999)
+        request_url = urlopen.call_args.args[0].full_url
+        from urllib.parse import parse_qs, urlparse
+        params = parse_qs(urlparse(request_url).query)
+        self.assertEqual(params["maxrecords"], ["250"])
+        self.assertEqual(params["sort"], ["hybridrel"])
+
+    def test_mix_story_sources_alternates_and_deduplicates(self):
+        feed = [{"title": "Feed one", "url": "https://feed.example/1"},
+                {"title": "Same story", "url": "https://feed.example/2"},
+                {"title": "Feed three", "url": "https://feed.example/3"}]
+        global_items = [{"title": "Global one", "url": "https://global.example/1", "source_country": "Japan"},
+                        {"title": "Same story!", "url": "https://global.example/2", "source_country": "France"},
+                        {"title": "Global three", "url": "https://global.example/3", "source_country": "Brazil"}]
+        result = newsletter.mix_story_sources(feed, global_items)
+        self.assertEqual([item["title"] for item in result],
+                         ["Feed one", "Global one", "Same story", "Global three", "Feed three"])
+
     def test_digest_does_not_claim_no_us_coverage(self):
         item = {"title": "Story", "url": "https://example.com/story", "source": "Example",
                 "source_country": "Japan", "topic": "topic", "gdelt_seen": "today",

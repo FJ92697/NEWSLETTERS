@@ -8,4 +8,5 @@ logs/
 drafts/
 private/
 .do/*.local.yaml
+site/issues/issue-*.html
 

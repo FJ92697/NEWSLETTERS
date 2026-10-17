@@ -1,25 +1,27 @@
 # World Desk newsletter
 
-A small, source-linked global business and technology briefing site with a daily scheduled collector. The public site serves static HTML through Nginx; a cron job collects enabled RSS and GDELT search results and publishes a headline-led issue at 06:00 America/New_York.
+A source-linked global business and technology briefing site with automated daily collection. The public site serves static HTML through Nginx; a scheduled collector reads enabled RSS feeds and GDELT search results and publishes a headline-led issue at 06:00 America/New_York.
 
 ## Live service
 
 - Site: https://161-35-103-204.sslip.io/
-- Server: a new DigitalOcean Droplet, NYC1, 2 vCPU / 4 GB RAM / 80 GB disk. The selected plan is $24/month before tax and any optional services.
-- Schedule: once per day, 06:00 America/New_York. The server and site are intended to run continuously; daily publishing depends on upstream source availability.
+- Server: isolated DigitalOcean Droplet, NYC1, 2 vCPU / 4 GB RAM / 80 GB disk. The selected plan is $24/month before tax and optional services.
+- Schedule: once per day, 06:00 America/New_York. The site is intended to run continuously; daily collection depends on the server, network, and upstream source availability.
 
-## Deployment
+## Automatic collection
 
-The isolated Droplet runs Ubuntu, Nginx, and the Python standard library. `deploy/install.sh` clones this public repository, configures a static Nginx site, and installs the daily cron job. The collector runs under a restricted `newsletterd` account. Generated public issues are stored in `/var/lib/newsletters/issues`, outside the Git checkout, so publishing does not dirty deployment files or block future updates. The app checkout fast-forwards from the public GitHub main branch at 5:50 a.m. Eastern, before the 6:00 a.m. collection. The collector runs as `newsletterd`, and daily logs rotate weekly. Run the installer only on the dedicated newsletter Droplet. It refuses to replace an existing non-symlink `/var/www/newsletters` path.
+The collector fetches enabled RSS feeds and runs up to two bounded GDELT Doc API searches per cycle: one combined OR query across configured topics and one broad U.S. comparison query. A short 429 retry happens only when the API supplies a usable `Retry-After` of 30 seconds or less. If GDELT is unavailable, RSS results can still be published; failed/empty collections preserve the prior public index. At most 50 records per GDELT query and 30 combined issue cards are processed. Review `sources.json` to manage feeds and topics.
 
-## Coverage and publication limits
+This is a bounded, configured sample, not every news item worldwide, and cannot prove an item has never appeared in U.S. media. Search results can be incomplete or rate limited. GDELT's documented search supports boolean operators and multilingual monitoring, but coverage is not exhaustive: [GDELT DOC API overview](https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/). Hosted API quotas can produce HTTP 429 responses, so this collector limits request volume: [GDELT API quota notes](https://blog.gdeltproject.org/behind-the-scenes-api-quotas-the-impact-of-a-fraction-of-a-qps/).
 
-This is a bounded sample of enabled RSS and GDELT searches, not a worldwide archive or a guarantee that an item has never appeared in U.S. media. A missing U.S. search result is not proof of exclusive coverage. Search results can be incomplete or rate limited. Public issues never reproduce full source articles, RSS excerpts, or source images. They show source headlines and links; with `--ai --publish-public` and an `OPENAI_API_KEY`, they also include original short paraphrases based only on the collected headline/feed metadata. For scheduled publishing, set the secret `OPENAI_API_KEY` in the runtime environment and `NEWSLETTER_AI_PUBLIC_SUMMARIES=true`; this invokes the API on each scheduled run and may incur usage charges. When AI is off, cards remain headline-and-link leads. GDELT is credited in generated issues. Confirm source terms and obtain permissions before expanding commercial reuse. Automated output is not independently fact-checked or reviewed by an editor.
+## Publication and business features
 
-The current configuration does not send email, collect signups, charge readers, accept sponsorship, or generate guaranteed profit. AI is disabled by default; public AI summaries require either the explicit `--ai` flag or `NEWSLETTER_AI_PUBLIC_SUMMARIES=true`, plus an API key, and may incur API charges. No payment keys, banking details, or API secrets belong in this public repository. The single Droplet has not been load-tested for millions of readers.
+Public issues link to sources and do not reproduce full articles, RSS excerpts, or source images. Optional AI summaries paraphrase only collected headline/feed metadata. They require `OPENAI_API_KEY` and explicit `--ai` or `NEWSLETTER_AI_PUBLIC_SUMMARIES=true`; API use may incur charges. AI is disabled by default. Automated output is not independently fact-checked or reviewed by an editor. Confirm source terms and obtain permissions before expanding commercial reuse.
 
-## Operations
+The system does not send email, collect signups, charge readers, accept sponsorship, or guarantee profit. The single Droplet has not been load-tested for millions of readers.
 
-On the server, view the daily log with `sudo tail -n 100 /var/log/newsletters-daily.log`; check services with `sudo systemctl status nginx cron`. To manually run a collection: `cd /opt/newsletters && sudo /usr/bin/python3 newsletter.py --draft --publish-public`. An empty/failed collection leaves the previous issue list unchanged.
+## Deployment and operations
 
+The isolated Droplet runs Ubuntu, Nginx, and Python's standard library. The collector runs under restricted account `newsletterd`; public issues live in `/var/lib/newsletters/issues`, outside the Git checkout. The app fast-forwards from the public GitHub main branch before its daily collection. The installer refuses to replace an existing non-symlink `/var/www/newsletters` path. Run it only on the dedicated newsletter Droplet.
 
+On the server, inspect logs with `sudo tail -n 100 /var/log/newsletters-daily.log`; check services with `sudo systemctl status nginx cron`. To manually run a collection: `cd /opt/newsletters && sudo /usr/bin/python3 newsletter.py --draft --publish-public`.
